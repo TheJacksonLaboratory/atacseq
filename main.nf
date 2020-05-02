@@ -170,7 +170,7 @@ if (params.input  && params.accession_list ) { exit 1, "You cannot define simult
 
 if (!params.input) {
 if(params.accession_list) { Channel.fromPath( params.accession_list ).ifEmpty { exit 1, "Accession list file not found in the location defined by --accession_list. Is the file path correct?" } }
-if(params.accession_list) {ch_srr_ids = Channel.fromPath( params.accession_list ).splitText().map{ it.trim() } }
+if(params.accession_list) {ch_srr_ids = Channel.fromPath( params.accession_list ).splitText().map{ it -> it.trim() } }
 }
 if(!params.accession_list){
 if (params.input)     { ch_input = file(params.input, checkIfExists: true) } else { exit 1, "Samples design file not specified!" }
@@ -305,35 +305,44 @@ if (!params.macs_gsize) {
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 /* --                                                                     -- */
-/* --                     FETCH READS FROM SRA                            -- */
+/* --             CREATE DESIGN FILE FROM SRA ENTRIES                     -- */
 /* --                                                                     -- */
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-
-if (params.accession_list) {
-
-    process GetSRA {
-        tag "${srr_id}"
-
-        input:
-        val(srr_id) from ch_srr_ids
-
-        output:
-        set val(srr_id), file("*.fastq.gz") into  sra_raw_reads
-
-        script:
-        """
-        fasterq-dump $srr_id --threads ${task.cpus} --split-3
-        pigz *.fastq
-        """
-    }
-
-    grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , reads_tuple[0],  reads_tuple[1] ] ) }
-
-    process CreateDesignRow {
+/*
+ * FETCH FROM SRA - CONVERT SRA TO FASTQ FILES
+ */
+process GetSRA {
     tag "${srr_id}"
-    publishDir 'results/files'
+
+    when:
+    params.accession_list
+
+    input:
+    val(srr_id) from ch_srr_ids
+
+    output:
+    set val(srr_id), file("*.fastq.gz") into  sra_raw_reads
+
+    script:
+    """
+    fasterq-dump $srr_id --threads ${task.cpus} --split-3
+    pigz *.fastq
+    cp *.fastq.gz ${workflow.launchDir}
+    """
+}
+
+grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "${workflow.launchDir}/"+file(reads_tuple[0]).simpleName.toString()+".fastq.gz",  "${workflow.launchDir}/"+file(reads_tuple[1]).simpleName.toString()+".fastq.gz" ] ) }
+
+/*
+ * CREATE DESIGN TABLE ENTRIES - CONVERT TUPLE IN CHANNEL TO SINGLE ROW CSV
+ */
+process CreateDesignRow {
+    tag "${srr_id}"
+
+    when:
+    params.accession_list
 
     input:
     set val(srr_id), val(reads_grouped_tuple) from grouped_design_variables
@@ -347,12 +356,19 @@ if (params.accession_list) {
     """
     echo $reads_grouped_tuple |  sed 's/[][]//g' |   sed 's/[[:space:]]//g' >  ${srr_id}.csv
     """
-    }
+}
 
-    process BindDesignRows {
+/*
+ * CREATE FINAL DESIGN TABLE - ADD HEADER AND CONCATENATED SINGLE ROW CSV FILES INTO ONE
+ */
+process BindDesignRows {
+    tag "design.csv"
+
+    when:
+    params.accession_list
+
     input:
     file(design_rows) from result.collect()
-    echo true
 
     output:  file 'design.csv' into ch_input
 
@@ -361,9 +377,7 @@ if (params.accession_list) {
     for row in $design_rows; do cat \$row >> body.csv; done
     cat header.csv body.csv > design.csv
     """
-    }
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
