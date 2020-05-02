@@ -329,7 +329,7 @@ if (params.accession_list) {
         """
     }
 
-    grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , reads_tuple[0],  reads_tuple[1] ] ) }
+    grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "s3:/"+reads_tuple[0].toString(),  "s3:/"+reads_tuple[1].toString() ] ) }
 
     process CreateDesignRow {
     tag "${srr_id}"
