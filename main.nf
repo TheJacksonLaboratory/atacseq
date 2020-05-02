@@ -315,6 +315,7 @@ if (!params.macs_gsize) {
  */
 process GetSRA {
     tag "${srr_id}"
+    echo true
 
     when:
     params.accession_list
@@ -329,11 +330,12 @@ process GetSRA {
     """
     fasterq-dump $srr_id --threads ${task.cpus} --split-3
     pigz *.fastq
-    cp *.fastq.gz ${workflow.launchDir}
+    cp *.fastq.gz "${workflow.launchDir}/results/"
+    echo  "${workflow.launchDir}/results/"
     """
 }
 
-grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "${workflow.launchDir}/"+file(reads_tuple[0]).simpleName.toString()+".fastq.gz",  "${workflow.launchDir}/"+file(reads_tuple[1]).simpleName.toString()+".fastq.gz" ] ) }
+grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "${workflow.launchDir}/results/"+file(reads_tuple[0]).simpleName.toString()+".fastq.gz",  "${workflow.launchDir}/results/"+file(reads_tuple[1]).simpleName.toString()+".fastq.gz" ] ) }
 
 /*
  * CREATE DESIGN TABLE ENTRIES - CONVERT TUPLE IN CHANNEL TO SINGLE ROW CSV
@@ -359,7 +361,7 @@ process CreateDesignRow {
 }
 
 /*
- * CREATE FINAL DESIGN TABLE - ADD HEADER AND CONCATENATED SINGLE ROW CSV FILES INTO ONE
+ * CREATE FINAL DESIGN TABLE - ADD HEADER AND CONCATENATE SINGLE ROW CSV FILES INTO ONE
  */
 process BindDesignRows {
     tag "design.csv"
@@ -2221,3 +2223,4 @@ def checkHostname() {
 /* --                                                                     -- */
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
+
