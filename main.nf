@@ -166,7 +166,15 @@ ch_mrep_deseq2_clustering_header = file("$baseDir/assets/multiqc/mrep_deseq2_clu
 ////////////////////////////////////////////////////
 
 // Validate inputs
+if (params.input  && params.accession_list ) { exit 1, "You cannot define simultaneously a design.csv and an SRA accession list as input! Please choose only one." }
+
+if (!params.input) {
+if(params.accession_list) { Channel.fromPath( params.accession_list ).ifEmpty { exit 1, "Accession list file not found in the location defined by --accession_list. Is the file path correct?" } }
+if(params.accession_list) {ch_srr_ids = Channel.fromPath( params.accession_list ).splitText().map{ it -> it.trim() } }
+}
+if(!params.accession_list){
 if (params.input)     { ch_input = file(params.input, checkIfExists: true) } else { exit 1, "Samples design file not specified!" }
+}
 if (params.gtf)       { ch_gtf = file(params.gtf, checkIfExists: true) } else { exit 1, "GTF annotation file not specified!" }
 if (params.gene_bed)  { ch_gene_bed = file(params.gene_bed, checkIfExists: true) }
 if (params.tss_bed)   { ch_tss_bed = file(params.tss_bed, checkIfExists: true) }
@@ -216,7 +224,8 @@ log.info nfcoreHeader()
 def summary = [:]
 summary['Run Name']               = custom_runName ?: workflow.runName
 summary['Data Type']              = params.single_end ? 'Single-End' : 'Paired-End'
-summary['Design File']            = params.input
+if (params.input)                 summary['Design File'] = params.input
+if (params.accession_list)        summary['Accesion list (SRA)'] = params.accession_list
 summary['Genome']                 = params.genome ?: 'Not supplied'
 summary['Fasta File']             = params.fasta
 summary['GTF File']               = params.gtf
@@ -292,6 +301,82 @@ if (!params.macs_gsize) {
              "  Peak calling, annotation and differential analysis will be skipped.\n" +
              "  Please specify value for '--macs_gsize' to run these steps.\n" +
              "======================================================================="
+}
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+/* --                                                                     -- */
+/* --             CREATE DESIGN FILE FROM SRA ENTRIES                     -- */
+/* --                                                                     -- */
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+/*
+ * FETCH FROM SRA - CONVERT SRA TO FASTQ FILES
+ */
+process GetSRA {
+    tag "${srr_id}"
+
+    when:
+    params.accession_list
+
+    input:
+    val(srr_id) from ch_srr_ids
+
+    output:
+    set val(srr_id), file("*.fastq.gz") into  sra_raw_reads
+
+    script:
+    """
+    fasterq-dump $srr_id --threads ${task.cpus} --split-3
+    pigz *.fastq
+    cp *.fastq.gz ${workflow.launchDir}
+    """
+}
+
+grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "${workflow.launchDir}/"+file(reads_tuple[0]).simpleName.toString()+".fastq.gz",  "${workflow.launchDir}/"+file(reads_tuple[1]).simpleName.toString()+".fastq.gz" ] ) }
+
+/*
+ * CREATE DESIGN TABLE ENTRIES - CONVERT TUPLE IN CHANNEL TO SINGLE ROW CSV
+ */
+process CreateDesignRow {
+    tag "${srr_id}"
+
+    when:
+    params.accession_list
+
+    input:
+    set val(srr_id), val(reads_grouped_tuple) from grouped_design_variables
+    echo true
+
+    output:
+    file "${srr_id}.csv" into result
+
+    // Note: even when params.single_end, the header has fastq_1 and fastq_2
+    // Example single end input: https://github.com/nf-core/atacseq/blob/master/assets/design_se.csv
+    """
+    echo $reads_grouped_tuple |  sed 's/[][]//g' |   sed 's/[[:space:]]//g' >  ${srr_id}.csv
+    """
+}
+
+/*
+ * CREATE FINAL DESIGN TABLE - ADD HEADER AND CONCATENATED SINGLE ROW CSV FILES INTO ONE
+ */
+process BindDesignRows {
+    tag "design.csv"
+
+    when:
+    params.accession_list
+
+    input:
+    file(design_rows) from result.collect()
+
+    output:  file 'design.csv' into ch_input
+
+    """
+    echo "group,replicate,fastq_1,fastq_2" > header.csv
+    for row in $design_rows; do cat \$row >> body.csv; done
+    cat header.csv body.csv > design.csv
+    """
 }
 
 ///////////////////////////////////////////////////////////////////////////////
