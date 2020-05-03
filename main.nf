@@ -315,7 +315,6 @@ if (!params.macs_gsize) {
  */
 process GetSRA {
     tag "${srr_id}"
-    echo true
 
     when:
     params.accession_list
@@ -330,8 +329,6 @@ process GetSRA {
     """
     fasterq-dump $srr_id --threads ${task.cpus} --split-3
     pigz *.fastq
-    cp *.fastq.gz "${workflow.launchDir}/results/"
-    echo  "${workflow.launchDir}/results/"
     """
 }
 
