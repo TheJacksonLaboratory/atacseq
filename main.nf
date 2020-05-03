@@ -2088,23 +2088,28 @@ workflow.onComplete {
         email_address = params.email_on_fail
     }
 
+    // Download template files
+    new File("email_template.txt")    << new URL ("https://raw.githubusercontent.com/TheJacksonLaboratory/atacseq/master/assets/email_template.txt").getText()
+    new File("email_template.html")   << new URL ("https://raw.githubusercontent.com/TheJacksonLaboratory/atacseq/master/assets/email_template.html").getText()
+    new File("sendmail_template.txt") << new URL ("https://raw.githubusercontent.com/TheJacksonLaboratory/atacseq/master/assets/sendmail_template.txt").getText()
+
     // Download image for sendmail_template.txt
     download_img("https://raw.githubusercontent.com/TheJacksonLaboratory/atacseq/master/assets/nf-core-atacseq_logo.png")
 
     // Render the TXT template
     def engine = new groovy.text.GStringTemplateEngine()
-    def tf = new File("${params.base_dir}/assets/email_template.txt")
+    def tf = new File("email_template.txt")
     def txt_template = engine.createTemplate(tf).make(email_fields)
     def email_txt = txt_template.toString()
 
     // Render the HTML template
-    def hf = new File("${params.base_dir}/assets/email_template.html")
+    def hf = new File("email_template.html")
     def html_template = engine.createTemplate(hf).make(email_fields)
     def email_html = html_template.toString()
 
     // Render the sendmail template
     def smail_fields = [ email: email_address, subject: subject, email_txt: email_txt, email_html: email_html, baseDir: "${params.base_dir}", mqcFile: mqc_report, mqcMaxSize: params.max_multiqc_email_size.toBytes() ]
-    def sf = new File("${params.base_dir}/assets/sendmail_template.txt")
+    def sf = new File("sendmail_template.txt")
     def sendmail_template = engine.createTemplate(sf).make(smail_fields)
     def sendmail_html = sendmail_template.toString()
 
