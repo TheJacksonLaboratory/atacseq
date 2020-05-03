@@ -170,7 +170,7 @@ if (params.input  && params.accession_list ) { exit 1, "You cannot define simult
 
 if (!params.input) {
 if(params.accession_list) { Channel.fromPath( params.accession_list ).ifEmpty { exit 1, "Accession list file not found in the location defined by --accession_list. Is the file path correct?" } }
-if(params.accession_list) {ch_srr_ids = Channel.fromPath( params.accession_list ).splitText().map{ it.trim() } }
+if(params.accession_list) {ch_srr_ids = Channel.fromPath( params.accession_list ).splitText().map{ it -> it.trim() } }
 }
 if(!params.accession_list){
 if (params.input)     { ch_input = file(params.input, checkIfExists: true) } else { exit 1, "Samples design file not specified!" }
