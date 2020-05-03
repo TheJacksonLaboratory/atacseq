@@ -335,7 +335,8 @@ process GetSRA {
     """
 }
 
-grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "${workflow.launchDir}/results/"+file(reads_tuple[0]).simpleName.toString()+".fastq.gz",  "${workflow.launchDir}/results/"+file(reads_tuple[1]).simpleName.toString()+".fastq.gz" ] ) }
+    if (params.cloudos)  {grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "s3:/"+reads_tuple[0].toString(),  "s3:/"+reads_tuple[1].toString() ] ) }}
+    if (!params.cloudos) {grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 ,  reads_tuple[0], reads_tuple[1] ] ) } }
 
 /*
  * CREATE DESIGN TABLE ENTRIES - CONVERT TUPLE IN CHANNEL TO SINGLE ROW CSV
