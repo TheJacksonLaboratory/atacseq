@@ -329,8 +329,12 @@ if (params.accession_list) {
         """
     }
 
-    if (params.cloudos)  {grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "s3:/"+reads_tuple[0].toString(),  "s3:/"+reads_tuple[1].toString() ] ) }}
-    if (!params.cloudos) {grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 ,  reads_tuple[0], reads_tuple[1] ] ) } }
+    if ( params.cloudos && !params.single_end) {grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "s3:/"+reads_tuple[0].toString(),  "s3:/"+reads_tuple[1].toString() ] ) }}
+    if (!params.cloudos && !params.single_end) {grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 ,  reads_tuple[0], reads_tuple[1] ] ) } }
+
+    if ( params.cloudos && params.single_end) {grouped_design_variables = sra_raw_reads.map { name, reads ->  tuple( name , [ name, 1 , "s3:/"+reads.toString(),  ' ' ] ) }}
+    if (!params.cloudos && params.single_end) {grouped_design_variables = sra_raw_reads.map { name, reads ->  tuple( name , [ name, 1 ,  reads, ' ' ] ) } }
+
 
     process CreateDesignRow {
     tag "${srr_id}"
