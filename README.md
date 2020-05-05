@@ -7,6 +7,9 @@
 [![Docker](https://img.shields.io/docker/automated/nfcore/atacseq.svg)](https://hub.docker.com/r/nfcore/atacseq)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2634132.svg)](https://doi.org/10.5281/zenodo.2634132)
 
+>  <img src="https://avatars2.githubusercontent.com/u/19977120?s=200&v=4" width="40"/> **NOTE**: <br>
+This is a fork of the [nf-core/atacseq](https://github.com/nf-core/atacseq) pipeline modified for use from the researchers of The Jackson Laboratory. For the stable, peer-reviewed version of this pipeline please visit [nf-core/atacseq](https://github.com/nf-core/rnaseq).
+
 ## Introduction
 
 **nfcore/atacseq** is a bioinformatics analysis pipeline used for ATAC-seq data.
