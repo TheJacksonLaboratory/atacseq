@@ -12,7 +12,7 @@
 * [Main arguments](#main-arguments)
   * [`-profile`](#-profile)
   * [`--input`](#--input)
-  * [`--accesion_list`](#--accesion_list)
+  * [`--accession_list`](#--accession_list)
 * [Generic arguments](#generic-arguments)
   * [`--single_end`](#--single_end)
   * [`--seq_center`](#--seq_center)
@@ -195,13 +195,12 @@ Example design files have been provided with the pipeline for [paired-end](../as
 
 
 
-
 ### `--accession_list`
 
 As an alternative to defining an `--input` design file, you can specify a list of SRA run (SRR) accession codes to retrieve data from the [Sequence Read Archive](https://www.ncbi.nlm.nih.gov/sra). Use this parameter to specify the filepath. It has to be a single column file without a header row as shown in the example below.
 
 ```bash
---accession_list '[path to SRR accesion list]'
+--accession_list '[path to SRR accession list]'
 ```
 
 #### Example accession list
