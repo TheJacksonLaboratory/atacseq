@@ -138,7 +138,7 @@ if (!(workflow.runName ==~ /[a-z]+_[a-z]+/)) {
 ////////////////////////////////////////////////////
 
 // Pipeline config
-ch_output_docs = file("$baseDir/docs/output.md", checkIfExists: true)
+ch_output_docs = file("${params.base_dir}/docs/output.md", checkIfExists: true)
 
 // JSON files required by BAMTools for alignment filtering
 if (params.single_end) {
@@ -149,24 +149,32 @@ if (params.single_end) {
 
 // Header files for MultiQC
 ch_multiqc_config = file(params.multiqc_config, checkIfExists: true)
-ch_mlib_peak_count_header = file("$baseDir/assets/multiqc/mlib_peak_count_header.txt", checkIfExists: true)
-ch_mlib_frip_score_header = file("$baseDir/assets/multiqc/mlib_frip_score_header.txt", checkIfExists: true)
-ch_mlib_peak_annotation_header = file("$baseDir/assets/multiqc/mlib_peak_annotation_header.txt", checkIfExists: true)
-ch_mlib_deseq2_pca_header = file("$baseDir/assets/multiqc/mlib_deseq2_pca_header.txt", checkIfExists: true)
-ch_mlib_deseq2_clustering_header = file("$baseDir/assets/multiqc/mlib_deseq2_clustering_header.txt", checkIfExists: true)
+ch_mlib_peak_count_header = file("${params.base_dir}/assets/multiqc/mlib_peak_count_header.txt", checkIfExists: true)
+ch_mlib_frip_score_header = file("${params.base_dir}/assets/multiqc/mlib_frip_score_header.txt", checkIfExists: true)
+ch_mlib_peak_annotation_header = file("${params.base_dir}/assets/multiqc/mlib_peak_annotation_header.txt", checkIfExists: true)
+ch_mlib_deseq2_pca_header = file("${params.base_dir}/assets/multiqc/mlib_deseq2_pca_header.txt", checkIfExists: true)
+ch_mlib_deseq2_clustering_header = file("${params.base_dir}/assets/multiqc/mlib_deseq2_clustering_header.txt", checkIfExists: true)
 
-ch_mrep_peak_count_header = file("$baseDir/assets/multiqc/mrep_peak_count_header.txt", checkIfExists: true)
-ch_mrep_frip_score_header = file("$baseDir/assets/multiqc/mrep_frip_score_header.txt", checkIfExists: true)
-ch_mrep_peak_annotation_header = file("$baseDir/assets/multiqc/mrep_peak_annotation_header.txt", checkIfExists: true)
-ch_mrep_deseq2_pca_header = file("$baseDir/assets/multiqc/mrep_deseq2_pca_header.txt", checkIfExists: true)
-ch_mrep_deseq2_clustering_header = file("$baseDir/assets/multiqc/mrep_deseq2_clustering_header.txt", checkIfExists: true)
+ch_mrep_peak_count_header = file("${params.base_dir}/assets/multiqc/mrep_peak_count_header.txt", checkIfExists: true)
+ch_mrep_frip_score_header = file("${params.base_dir}/assets/multiqc/mrep_frip_score_header.txt", checkIfExists: true)
+ch_mrep_peak_annotation_header = file("${params.base_dir}/assets/multiqc/mrep_peak_annotation_header.txt", checkIfExists: true)
+ch_mrep_deseq2_pca_header = file("${params.base_dir}/assets/multiqc/mrep_deseq2_pca_header.txt", checkIfExists: true)
+ch_mrep_deseq2_clustering_header = file("${params.base_dir}/assets/multiqc/mrep_deseq2_clustering_header.txt", checkIfExists: true)
 
 ////////////////////////////////////////////////////
 /* --          VALIDATE INPUTS                 -- */
 ////////////////////////////////////////////////////
 
 // Validate inputs
+if (params.input  && params.accession_list ) { exit 1, "You cannot define simultaneously a design.csv and an SRA accession list as input! Please choose only one." }
+
+if (!params.input) {
+if(params.accession_list) { Channel.fromPath( params.accession_list ).ifEmpty { exit 1, "Accession list file not found in the location defined by --accession_list. Is the file path correct?" } }
+if(params.accession_list) {ch_srr_ids = Channel.fromPath( params.accession_list ).splitText().unique().map{ it -> it.trim() } }
+}
+if(!params.accession_list){
 if (params.input)     { ch_input = file(params.input, checkIfExists: true) } else { exit 1, "Samples design file not specified!" }
+}
 if (params.gtf)       { ch_gtf = file(params.gtf, checkIfExists: true) } else { exit 1, "GTF annotation file not specified!" }
 if (params.gene_bed)  { ch_gene_bed = file(params.gene_bed, checkIfExists: true) }
 if (params.tss_bed)   { ch_tss_bed = file(params.tss_bed, checkIfExists: true) }
@@ -216,7 +224,8 @@ log.info nfcoreHeader()
 def summary = [:]
 summary['Run Name']               = custom_runName ?: workflow.runName
 summary['Data Type']              = params.single_end ? 'Single-End' : 'Paired-End'
-summary['Design File']            = params.input
+if (params.input)                 summary['Design File'] = params.input
+if (params.accession_list)        summary['Accesion list (SRA)'] = params.accession_list
 summary['Genome']                 = params.genome ?: 'Not supplied'
 summary['Fasta File']             = params.fasta
 summary['GTF File']               = params.gtf
@@ -293,6 +302,72 @@ if (!params.macs_gsize) {
              "  Please specify value for '--macs_gsize' to run these steps.\n" +
              "======================================================================="
 }
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+/* --                                                                     -- */
+/* --                     FETCH READS FROM SRA                            -- */
+/* --                                                                     -- */
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+
+if (params.accession_list) {
+
+    process GetSRA {
+        tag "${srr_id}"
+
+        input:
+        val(srr_id) from ch_srr_ids
+
+        output:
+        set val(srr_id), file("*.fastq.gz") into  sra_raw_reads
+
+        script:
+        """
+        fasterq-dump $srr_id --threads ${task.cpus} --split-3
+        pigz *.fastq
+        """
+    }
+
+    if ( params.s3_work && !params.single_end) {grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 , "s3:/"+reads_tuple[0].toString(),  "s3:/"+reads_tuple[1].toString() ] ) }}
+    if (!params.s3_work && !params.single_end) {grouped_design_variables = sra_raw_reads.map { name, reads_tuple ->  tuple( name , [ name, 1 ,  reads_tuple[0], reads_tuple[1] ] ) } }
+
+    if ( params.s3_work && params.single_end) {grouped_design_variables = sra_raw_reads.map { name, reads ->  tuple( name , [ name, 1 , "s3:/"+reads.toString(),  ' ' ] ) }}
+    if (!params.s3_work && params.single_end) {grouped_design_variables = sra_raw_reads.map { name, reads ->  tuple( name , [ name, 1 ,  reads, ' ' ] ) } }
+
+    process CreateDesignRow {
+    tag "${srr_id}"
+    publishDir 'results/files'
+
+    input:
+    set val(srr_id), val(reads_grouped_tuple) from grouped_design_variables
+    echo true
+
+    output:
+    file "${srr_id}.csv" into result
+
+    // Note: even when params.single_end, the header has fastq_1 and fastq_2
+    // Example single end input: https://github.com/nf-core/atacseq/blob/master/assets/design_se.csv
+    """
+    echo $reads_grouped_tuple |  sed 's/[][]//g' |   sed 's/[[:space:]]//g' >  ${srr_id}.csv
+    """
+    }
+
+    process BindDesignRows {
+    input:
+    file(design_rows) from result.collect()
+    echo true
+
+    output:  file 'design.csv' into ch_input
+
+    """
+    echo "group,replicate,fastq_1,fastq_2" > header.csv
+    for row in $design_rows; do cat \$row >> body.csv; done
+    cat header.csv body.csv > design.csv
+    """
+    }
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -2016,20 +2091,28 @@ workflow.onComplete {
         email_address = params.email_on_fail
     }
 
+    // Download template files
+    new File("email_template.txt")    << new URL ("https://raw.githubusercontent.com/TheJacksonLaboratory/atacseq/master/assets/email_template.txt").getText()
+    new File("email_template.html")   << new URL ("https://raw.githubusercontent.com/TheJacksonLaboratory/atacseq/master/assets/email_template.html").getText()
+    new File("sendmail_template.txt") << new URL ("https://raw.githubusercontent.com/TheJacksonLaboratory/atacseq/master/assets/sendmail_template.txt").getText()
+
+    // Download image for sendmail_template.txt
+    download_img("https://raw.githubusercontent.com/TheJacksonLaboratory/atacseq/master/assets/nf-core-atacseq_logo.png")
+
     // Render the TXT template
     def engine = new groovy.text.GStringTemplateEngine()
-    def tf = new File("$baseDir/assets/email_template.txt")
+    def tf = new File("email_template.txt")
     def txt_template = engine.createTemplate(tf).make(email_fields)
     def email_txt = txt_template.toString()
 
     // Render the HTML template
-    def hf = new File("$baseDir/assets/email_template.html")
+    def hf = new File("email_template.html")
     def html_template = engine.createTemplate(hf).make(email_fields)
     def email_html = html_template.toString()
 
     // Render the sendmail template
-    def smail_fields = [ email: email_address, subject: subject, email_txt: email_txt, email_html: email_html, baseDir: "$baseDir", mqcFile: mqc_report, mqcMaxSize: params.max_multiqc_email_size.toBytes() ]
-    def sf = new File("$baseDir/assets/sendmail_template.txt")
+    def smail_fields = [ email: email_address, subject: subject, email_txt: email_txt, email_html: email_html, baseDir: "${params.base_dir}", mqcFile: mqc_report, mqcMaxSize: params.max_multiqc_email_size.toBytes() ]
+    def sf = new File("sendmail_template.txt")
     def sendmail_template = engine.createTemplate(sf).make(smail_fields)
     def sendmail_html = sendmail_template.toString()
 
@@ -2127,6 +2210,13 @@ def checkHostname() {
             }
         }
     }
+}
+
+// Download .png image and save as .png file in current working directory
+public void download_img(def address) {
+  new File("${address.tokenize('/')[-1]}").withOutputStream { out ->
+      new URL(address).withInputStream { from ->  out << from; }
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

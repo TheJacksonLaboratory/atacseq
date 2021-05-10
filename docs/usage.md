@@ -12,6 +12,7 @@
 * [Main arguments](#main-arguments)
   * [`-profile`](#-profile)
   * [`--input`](#--input)
+  * [`--accession_list`](#--accession_list)
 * [Generic arguments](#generic-arguments)
   * [`--single_end`](#--single_end)
   * [`--seq_center`](#--seq_center)
@@ -191,6 +192,28 @@ treatment,3,AEG588A6_S6_L004_R1_001.fastq.gz,AEG588A6_S6_L004_R2_001.fastq.gz
 | `fastq_2`   | Full path to FastQ file for read 2. File has to be zipped and have the extension ".fastq.gz" or ".fq.gz".   |
 
 Example design files have been provided with the pipeline for [paired-end](../assets/design_pe.csv) and [single-end](../assets/design_se.csv) data.
+
+
+
+### `--accession_list`
+
+As an alternative to defining an `--input` design file, you can specify a list of SRA run (SRR) accession codes to retrieve data from the [Sequence Read Archive](https://www.ncbi.nlm.nih.gov/sra). Use this parameter to specify the filepath. It has to be a single column file without a header row as shown in the example below.
+
+```bash
+--accession_list '[path to SRR accession list]'
+```
+
+#### Example accession list
+
+```console
+SRR3623945
+SRR3623928
+```
+
+#### **NOTES**:
+
+ - The option `--accession_list` is alternative to `--input` and they cannot be used in conjuction.
+ - The accession list must be homogeneous, with SRRs of either only single-end or only paired-end reads. 
 
 ## Generic arguments
 
